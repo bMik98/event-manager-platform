@@ -1,0 +1,291 @@
+---
+openapi: 3.0.0
+info:
+  title: Event Notificator API
+  description: API for managing event notifications
+  version: 1.0.0
+servers:
+- url: http://localhost:8081
+tags:
+- name: Notifications
+  description: Read and mark notifications generated from event changes
+paths:
+  "/notifications":
+    get:
+      summary: Получить все непрочитанные нотификации пользователя. Allowed roles=[ADMIN, USER]
+      description: |-
+        Получить непрочитанные нотификации текущего пользователя. ID пользователя и его роль извлекаются из JWT токена, выданного сервисом event-manager.
+
+        В ответе возвращаются именно пользовательские нотификации, а не сырой Kafka DTO. У каждой нотификации есть собственный `notificationId`, короткий `message` и структурированный `payload` с деталями изменения события.
+
+        Если непрочитанных нотификаций нет, сервис должен вернуть `200 OK` и пустой массив.
+
+        Изменения по итерациям:
+        - Итерация 4: endpoint добавлен; ответ построен вокруг notification DTO с `notificationId`, `message` и `payload`.
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Успешно возвращается список непрочитанных нотификаций пользователя
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/NotificationResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        '500':
+          "$ref": "#/components/responses/ServerError"
+      tags:
+      - Notifications
+    post:
+      summary: Пометить нотификации как прочитанные. Allowed roles=[ADMIN, USER]
+      description: |-
+        Пометить переданные нотификации как прочитанные. В запросе используются `notificationId`, полученные из `GET /notifications`.
+
+        Обновлять нужно только записи текущего пользователя из JWT. Если часть ID не найдена или принадлежит другому пользователю, сервис должен безопасно проигнорировать их и не падать с ошибкой.
+
+        Изменения по итерациям:
+        - Итерация 4: endpoint добавлен.
+        - Итерация 5: изменена внутренняя логика: после mark-as-read добавлена синхронизация unread-counter в Redis с фактическим значением из БД.
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/MarkNotificationsAsReadRequest"
+      responses:
+        '204':
+          description: Нотификации успешно помечены как прочитанные
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        '500':
+          "$ref": "#/components/responses/ServerError"
+      tags:
+      - Notifications
+components:
+  schemas:
+    MarkNotificationsAsReadRequest:
+      type: object
+      description: Запрос на пометку списка нотификаций как прочитанных
+      required:
+      - notificationIds
+      properties:
+        notificationIds:
+          type: array
+          description: Список ID нотификаций, которые необходимо пометить как прочитанные
+          items:
+            type: integer
+            format: int64
+      example:
+        notificationIds:
+        - 101
+        - 102
+        - 103
+    NotificationResponse:
+      type: object
+      description: Пользовательская нотификация о том, что связанное мероприятие было изменено
+      required:
+      - notificationId
+      - type
+      - eventId
+      - createdAt
+      - isRead
+      - message
+      - payload
+      properties:
+        notificationId:
+          type: integer
+          format: int64
+          description: Уникальный идентификатор пользовательской нотификации
+        type:
+          type: string
+          description: Тип нотификации
+          example: EVENT_UPDATED
+        eventId:
+          type: integer
+          format: int64
+          description: Идентификатор мероприятия, к которому относится нотификация
+        createdAt:
+          type: string
+          format: date-time
+          description: Дата и время создания пользовательской нотификации
+        isRead:
+          type: boolean
+          description: Флаг прочитанности нотификации
+        message:
+          type: string
+          description: Короткое человеко-читаемое сообщение для быстрого отображения
+          example: Событие было изменено
+        payload:
+          "$ref": "#/components/schemas/NotificationPayload"
+      example:
+        notificationId: 101
+        type: EVENT_UPDATED
+        eventId: 10
+        createdAt: '2026-03-16T12:00:00Z'
+        isRead: false
+        message: Событие было изменено
+        payload:
+          messageId: 6e7c9f2d-1f87-4f58-8e5f-4d3b5e8b2b11
+          eventType: EVENT_UPDATED
+          occurredAt: '2026-03-16T12:00:00Z'
+          changedById: 3
+          ownerId: 5
+          eventName: Java Meetup
+          changes:
+          - field: date
+            oldValue: '2026-03-20T10:00:00Z'
+            newValue: '2026-03-21T10:00:00Z'
+          - field: status
+            oldValue: WAIT_START
+            newValue: CANCELLED
+    NotificationPayload:
+      type: object
+      description: |-
+        Структурированный payload изменения события. Логически соответствует данным,
+        которые были сохранены в `notification_event_payloads`.
+      required:
+      - messageId
+      - eventType
+      - occurredAt
+      - changes
+      properties:
+        messageId:
+          type: string
+          format: uuid
+          description: Технический идентификатор Kafka-сообщения для идемпотентности
+        eventType:
+          type: string
+          description: Тип доменного события
+          example: EVENT_UPDATED
+        occurredAt:
+          type: string
+          format: date-time
+          description: Дата и время возникновения изменения
+        changedById:
+          type: integer
+          format: int64
+          nullable: true
+          description: Пользователь, который внес изменение. Может быть `null`, если изменение сделано системой или scheduler-ом
+        ownerId:
+          type: integer
+          format: int64
+          description: Владелец мероприятия
+        eventName:
+          type: string
+          description: Snapshot названия мероприятия на момент сохранения нотификации
+          example: Java Meetup
+        changes:
+          type: array
+          description: Список изменившихся полей мероприятия
+          items:
+            "$ref": "#/components/schemas/NotificationChange"
+    NotificationChange:
+      type: object
+      description: Изменение одного поля мероприятия
+      required:
+      - field
+      properties:
+        field:
+          type: string
+          description: Имя изменившегося поля мероприятия
+          example: status
+        oldValue:
+          nullable: true
+          description: Старое значение поля
+          oneOf:
+          - type: string
+          - type: integer
+          - type: number
+          - type: boolean
+        newValue:
+          nullable: true
+          description: Новое значение поля
+          oneOf:
+          - type: string
+          - type: integer
+          - type: number
+          - type: boolean
+      example:
+        field: status
+        oldValue: WAIT_START
+        newValue: CANCELLED
+    ErrorMessageResponse:
+      type: object
+      description: Объект ошибки, возвращаемый в случае возникновения на сервере ошибки. Содержит разное наполнение в зависимости от типа и контекста возникновения ошибки.
+      required:
+      - message
+      - detailedMessage
+      - dateTime
+      example:
+        message: Сообщение об ошибке
+        detailedMessage: Более детальное сообщение об ошибке
+        dateTime: '2024-12-03T10:15:30'
+      properties:
+        message:
+          type: string
+          description: Человеко-читаемое сообщение об ошибке
+        detailedMessage:
+          type: string
+          description: Более детальное сообщение об ошибке. Например, содержимое exception
+        dateTime:
+          type: string
+          format: date-time
+          description: Дата и время возникновения ошибки. Формат "YYYY-MM-DDThh:mm:ss"
+  responses:
+    BadRequest:
+      description: Запрос с невалидными данными. Например, некорректные параметры запроса или пустой обязательный список `notificationIds`.
+      content:
+        application/json:
+          schema:
+            "$ref": "#/components/schemas/ErrorMessageResponse"
+          example:
+            message: Некорректный запрос
+            detailedMessage: Более детальное сообщение об ошибке
+            dateTime: '2024-12-03T10:15:30'
+    Unauthorized:
+      description: Аутентификация отсутствует или не удалась
+      content:
+        application/json:
+          schema:
+            "$ref": "#/components/schemas/ErrorMessageResponse"
+          example:
+            message: Необходима аутентификация
+            detailedMessage: Более детальное сообщение об ошибке
+            dateTime: '2024-12-03T10:15:30'
+    Forbidden:
+      description: У пользователя недостаточно прав для выполнения этой операции
+      content:
+        application/json:
+          schema:
+            "$ref": "#/components/schemas/ErrorMessageResponse"
+          example:
+            message: Недостаточно прав для выполнения операции
+            detailedMessage: Более детальное сообщение об ошибке
+            dateTime: '2024-12-03T10:15:30'
+    ServerError:
+      description: Внутренняя ошибка сервера
+      content:
+        application/json:
+          schema:
+            "$ref": "#/components/schemas/ErrorMessageResponse"
+          example:
+            message: Внутренняя ошибка сервера
+            detailedMessage: Более детальное сообщение об ошибке
+            dateTime: '2024-12-03T10:15:30'
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

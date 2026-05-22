@@ -1,0 +1,36 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0001-starter-baseline
+      author: course-team
+      changes:
+        - createTable:
+            tableName: starter_bootstrap_marker
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: note
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - insert:
+            tableName: starter_bootstrap_marker
+            columns:
+              - column:
+                  name: id
+                  valueNumeric: 1
+              - column:
+                  name: note
+                  value: starter baseline applied
+              - column:
+                  name: created_at
+                  valueDate: 2025-01-01T00:00:00

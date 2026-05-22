@@ -1,0 +1,22 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: event-manager-postgres
+    environment:
+      POSTGRES_DB: event_manager
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d event_manager"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - event_manager_pg_data:/var/lib/postgresql/data
+
+volumes:
+  event_manager_pg_data:
