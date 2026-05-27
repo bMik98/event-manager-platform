@@ -13,20 +13,20 @@ import java.util.List;
 
 @Service
 @AllArgsConstructor
-public class EventLocationService {
+public class LocationService {
 
     private final LocationRepository locationRepository;
     private final LocationDbMapper mapper;
 
     @Transactional
-    public Location create(Location location) {
+    public Location createLocation(Location location) {
         LocationEntity entity = mapper.toEntity(location);
         LocationEntity createdLocation = locationRepository.save(entity);
         return mapper.toDomain(createdLocation);
     }
 
     @Transactional
-    public Location update(Long targetLocationId, Location source) {
+    public Location updateLocation(Long targetLocationId, Location source) {
         LocationEntity entity = locationRepository.findById(targetLocationId)
                 .orElseThrow(() -> new LocationNotFoundException(targetLocationId));
         mapper.updateEntityFromDomain(source, entity);
@@ -34,7 +34,7 @@ public class EventLocationService {
         return mapper.toDomain(updatedEntity);
     }
 
-    public void delete(Long locationId) {
+    public void deleteLocationById(Long locationId) {
         if (!locationRepository.existsById(locationId)) {
             throw new LocationNotFoundException(locationId);
         }
@@ -42,14 +42,14 @@ public class EventLocationService {
     }
 
     @Transactional
-    public Location get(Long id) {
+    public Location getLocation(Long id) {
         LocationEntity entity = locationRepository.findById(id)
                 .orElseThrow(() -> new LocationNotFoundException(id));
         return mapper.toDomain(entity);
     }
 
     @Transactional
-    public List<Location> getAll() {
+    public List<Location> getAllLocations() {
         List<LocationEntity> entities = locationRepository.findAll();
         return mapper.toDomain(entities);
     }
