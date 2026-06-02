@@ -34,6 +34,7 @@ public class LocationService {
         return mapper.toDomain(updatedEntity);
     }
 
+    @Transactional
     public void deleteLocationById(Long locationId) {
         if (!locationRepository.existsById(locationId)) {
             throw new LocationNotFoundException(locationId);

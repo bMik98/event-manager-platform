@@ -5,6 +5,7 @@ import dev.sorokin.eventmanager.controller.dto.LocationResponseDto;
 import dev.sorokin.eventmanager.controller.mapper.LocationWebMapper;
 import dev.sorokin.eventmanager.service.LocationService;
 import dev.sorokin.eventmanager.service.model.Location;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import org.springframework.http.HttpStatus;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
+@Tag(name = "Locations", description = "Location CRUD and capacity constraints")
 public class LocationController {
 
     private final LocationService locationService;
