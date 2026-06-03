@@ -7,7 +7,7 @@ public record ErrorMessageResponse(
         String detailedMessage,
         LocalDateTime timestamp
 ) {
-    public ErrorMessageResponse(String message, String detailedMessage) {
-        this(message, detailedMessage, LocalDateTime.now());
+    public static ErrorMessageResponse of(String message, String detailedMessage) {
+        return new ErrorMessageResponse(message, detailedMessage, LocalDateTime.now());
     }
 }

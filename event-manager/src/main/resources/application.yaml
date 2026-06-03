@@ -9,7 +9,7 @@ spring:
     #    url: jdbc:postgresql://localhost:5432/event_manager
     url: jdbc:postgresql://localhost:5432/postgres
     username: postgres
-    password:
+    password: postgres
     hikari:
       autocommit: false
 
@@ -30,4 +30,19 @@ logging:
 
 springdoc:
   swagger-ui:
+    operations-sorter: method
+    tags-sorter: alpha
     path: /swagger-ui/index.html
+
+password:
+  policy:
+    min-length: 8
+    max-length: 255
+    require-uppercase: true
+    require-lowercase: true
+    require-digit: true
+    require-special-char: true
+
+jwt:
+  secret: ZhIzthldLwm1rFCl9wLAV3/yiYohS8FoFF+HFZBeKk0=
+  expiration-in-millis: 86400000   # 24 hours in milliseconds

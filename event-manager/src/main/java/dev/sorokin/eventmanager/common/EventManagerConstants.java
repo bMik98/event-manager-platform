@@ -6,4 +6,5 @@ import lombok.NoArgsConstructor;
 public class EventManagerConstants {
 
     public static final int MIN_LOCATION_CAPACITY = 5;
+    public static final int MIN_USER_AGE = 18;
 }

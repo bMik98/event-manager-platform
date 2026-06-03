@@ -28,14 +28,14 @@ public class GlobalExceptionHandler {
                 .stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .collect(Collectors.joining(", "));
-        ErrorMessageResponse body = new ErrorMessageResponse(VALIDATION_FAILED, details);
+        ErrorMessageResponse body = ErrorMessageResponse.of(VALIDATION_FAILED, details);
         return ResponseEntity.badRequest().body(body);
     }
 
     @ExceptionHandler(ItemNotFoundException.class)
     public ResponseEntity<ErrorMessageResponse> handleEntityNotFoundException(ItemNotFoundException ex) {
         log.warn(NOT_FOUND, ex);
-        ErrorMessageResponse body = new ErrorMessageResponse(NOT_FOUND, ex.getMessage());
+        ErrorMessageResponse body = ErrorMessageResponse.of(NOT_FOUND, ex.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
 
@@ -46,7 +46,7 @@ public class GlobalExceptionHandler {
                 .stream()
                 .map(violation -> violation.getPropertyPath().toString() + ": " + violation.getMessage())
                 .collect(Collectors.joining(", "));
-        ErrorMessageResponse body = new ErrorMessageResponse(VALIDATION_FAILED, details);
+        ErrorMessageResponse body = ErrorMessageResponse.of(VALIDATION_FAILED, details);
         return ResponseEntity.badRequest().body(body);
     }
 
@@ -57,15 +57,22 @@ public class GlobalExceptionHandler {
                 ? mediaType.toString()
                 : "unknown";
         String detailedMessage = "Media type '%s' is not supported".formatted(unsupportedType);
-        ErrorMessageResponse body = new ErrorMessageResponse(UNSUPPORTED_MEDIA_TYPE, detailedMessage);
+        ErrorMessageResponse body = ErrorMessageResponse.of(UNSUPPORTED_MEDIA_TYPE, detailedMessage);
         log.warn(UNSUPPORTED_MEDIA_TYPE, ex);
         return new ResponseEntity<>(body, HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorMessageResponse> handleIllegalArgumentException(IllegalArgumentException ex) {
+        log.warn("Bad request: {}", ex.getMessage());
+        ErrorMessageResponse body = ErrorMessageResponse.of("Bad request", ex.getMessage());
+        return ResponseEntity.badRequest().body(body);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorMessageResponse> handleException(Exception ex) {
         log.error("Unexpected server error", ex);
-        ErrorMessageResponse body = new ErrorMessageResponse(
+        ErrorMessageResponse body = ErrorMessageResponse.of(
                 "Internal server error",
                 "Unexpected server error. See logs for details."
         );
