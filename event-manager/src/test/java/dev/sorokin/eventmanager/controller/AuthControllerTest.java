@@ -8,6 +8,7 @@ import dev.sorokin.eventmanager.controller.dto.UserResponseDto;
 import dev.sorokin.eventmanager.service.model.UserRole;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
 import static dev.sorokin.eventmanager.IntegrationTestExtension.registerUser;
@@ -50,7 +51,7 @@ class AuthControllerTest {
                 .uri("/users")
                 .body(new UserRegistrationRequest(LOGIN, PASSWORD, AGE))
                 .exchange()
-                .expectStatus().isBadRequest();
+                .expectStatus().isEqualTo(HttpStatus.CONFLICT);
     }
 
     @Test

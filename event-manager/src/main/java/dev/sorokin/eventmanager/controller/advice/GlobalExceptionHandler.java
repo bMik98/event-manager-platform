@@ -8,10 +8,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -77,6 +81,41 @@ public class GlobalExceptionHandler {
         ErrorMessageResponse body = ErrorMessageResponse.of(UNSUPPORTED_MEDIA_TYPE, detailedMessage);
         log.warn(UNSUPPORTED_MEDIA_TYPE, ex);
         return new ResponseEntity<>(body, HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+    }
+
+    @ExceptionHandler(NoHandlerFoundException.class)
+    public ResponseEntity<ErrorMessageResponse> handleNoHandlerFoundException(NoHandlerFoundException ex) {
+        log.warn("No handler found: {} {}", ex.getHttpMethod(), ex.getRequestURL());
+        ErrorMessageResponse body = ErrorMessageResponse.of(NOT_FOUND,
+                "No handler found for %s %s".formatted(ex.getHttpMethod(), ex.getRequestURL()));
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorMessageResponse> handleNoResourceFoundException(NoResourceFoundException ex) {
+        log.warn("No resource found: {}", ex.getResourcePath());
+        ErrorMessageResponse body = ErrorMessageResponse.of(NOT_FOUND,
+                "No resource found: %s".formatted(ex.getResourcePath()));
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorMessageResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        log.warn("Method not supported: {}", ex.getMessage());
+        String supported = ex.getSupportedHttpMethods() != null
+                ? ex.getSupportedHttpMethods().toString()
+                : "none";
+        ErrorMessageResponse body = ErrorMessageResponse.of(
+                "Method not allowed",
+                "Method '%s' is not supported. Supported: %s".formatted(ex.getMethod(), supported));
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(body);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorMessageResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
+        log.warn("Unreadable request body: {}", ex.getMessage());
+        ErrorMessageResponse body = ErrorMessageResponse.of(VALIDATION_FAILED, "Malformed or unreadable request body");
+        return ResponseEntity.badRequest().body(body);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

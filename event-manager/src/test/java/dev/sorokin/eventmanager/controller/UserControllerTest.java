@@ -50,14 +50,15 @@ class UserControllerTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .exchange()
                 .expectStatus().isOk()
-                .expectBody(new ParameterizedTypeReference<List<UserResponseDto>>() {})
+                .expectBody(new ParameterizedTypeReference<List<UserResponseDto>>() {
+                })
                 .returnResult().getResponseBody();
 
-        assertThat(body).hasSize(2); // admin + test user
-        assertThat(body).anySatisfy(user -> {
-            assertThat(user.login()).isEqualTo(LOGIN);
-            assertThat(user.age()).isEqualTo(AGE);
-        });
+        assertThat(body).hasSize(2)
+                .anySatisfy(user -> {
+                    assertThat(user.login()).isEqualTo(LOGIN);
+                    assertThat(user.age()).isEqualTo(AGE);
+                });
     }
 
     @Test
