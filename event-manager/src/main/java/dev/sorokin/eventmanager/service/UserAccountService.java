@@ -3,8 +3,10 @@ package dev.sorokin.eventmanager.service;
 import dev.sorokin.eventmanager.repository.UserAccountRepository;
 import dev.sorokin.eventmanager.repository.entity.UserEntity;
 import dev.sorokin.eventmanager.repository.mapper.UserDbMapper;
+import dev.sorokin.eventmanager.service.exception.UserAlreadyExistsException;
 import dev.sorokin.eventmanager.service.exception.UserNotFoundException;
 import dev.sorokin.eventmanager.service.model.UserAccount;
+import dev.sorokin.eventmanager.service.model.UserRole;
 import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -21,11 +23,16 @@ public class UserAccountService {
     @Transactional
     public UserAccount createUser(UserAccount userAccount) {
         if (userAccountRepository.existsByLogin(userAccount.login())) {
-            throw new IllegalArgumentException("Login '%s' is already taken".formatted(userAccount.login()));
+            throw new UserAlreadyExistsException(userAccount.login());
         }
         UserEntity entity = mapper.toEntity(userAccount);
         UserEntity createdUser = userAccountRepository.save(entity);
         return mapper.toDomain(createdUser);
+    }
+
+    @Transactional
+    public boolean hasAdminAccount() {
+        return userAccountRepository.existsByRole(UserRole.ADMIN);
     }
 
     @Transactional

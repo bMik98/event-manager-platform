@@ -1,7 +1,9 @@
 package dev.sorokin.eventmanager.controller.advice;
 
+import dev.sorokin.eventmanager.common.exception.ItemAlreadyExistsException;
 import dev.sorokin.eventmanager.common.exception.ItemNotFoundException;
 import jakarta.validation.ConstraintViolationException;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -20,6 +22,7 @@ public class GlobalExceptionHandler {
     public static final String VALIDATION_FAILED = "Validation failed";
     public static final String UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
     public static final String NOT_FOUND = "Not found";
+    public static final String CONFLICT = "Conflict";
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorMessageResponse> handleValidationException(MethodArgumentNotValidException ex) {
@@ -33,10 +36,24 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(ItemNotFoundException.class)
-    public ResponseEntity<ErrorMessageResponse> handleEntityNotFoundException(ItemNotFoundException ex) {
+    public ResponseEntity<ErrorMessageResponse> handleItemNotFoundException(ItemNotFoundException ex) {
         log.warn(NOT_FOUND, ex);
         ErrorMessageResponse body = ErrorMessageResponse.of(NOT_FOUND, ex.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    @ExceptionHandler(ItemAlreadyExistsException.class)
+    public ResponseEntity<ErrorMessageResponse> handleItemAlreadyExistsException(ItemAlreadyExistsException ex) {
+        log.warn(CONFLICT, ex);
+        ErrorMessageResponse body = ErrorMessageResponse.of(CONFLICT, ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ErrorMessageResponse> handleHandlerMethodValidationException(HandlerMethodValidationException ex) {
+        log.warn(VALIDATION_FAILED, ex);
+        ErrorMessageResponse body = ErrorMessageResponse.of(VALIDATION_FAILED, ex.getMessage());
+        return ResponseEntity.badRequest().body(body);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)

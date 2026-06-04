@@ -54,10 +54,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/users/auth").permitAll()
                         .requestMatchers(HttpMethod.POST, "/users").permitAll()
 
-                        .requestMatchers(HttpMethod.GET, "/users/**").hasAuthority("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/**").hasRole("ADMIN")
 
-                        .requestMatchers(HttpMethod.GET, "/locations/**").hasAnyAuthority("USER", "ADMIN")
-                        .requestMatchers("/locations/**").hasAuthority("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/locations/**").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/locations/**").hasRole("ADMIN")
 
                         .anyRequest().denyAll()
                 )

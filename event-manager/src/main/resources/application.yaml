@@ -46,3 +46,7 @@ password:
 jwt:
   secret: ZhIzthldLwm1rFCl9wLAV3/yiYohS8FoFF+HFZBeKk0=
   expiration-in-millis: 86400000   # 24 hours in milliseconds
+
+default-admin:
+  login: admin
+  password: Admin1234!

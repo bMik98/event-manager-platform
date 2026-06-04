@@ -1,8 +1,6 @@
 package dev.sorokin.eventmanager.security;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.sorokin.eventmanager.controller.advice.ErrorMessageResponse;
-import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 
@@ -21,7 +20,7 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class CustomAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response, @NonNull AuthenticationException ex)
@@ -30,7 +29,7 @@ public class CustomAuthenticationEntryPoint implements AuthenticationEntryPoint 
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         var errorMessageResponse = ErrorMessageResponse.of("Unauthorized", ex.getMessage());
-        String body = objectMapper.writeValueAsString(errorMessageResponse);
+        String body = jsonMapper.writeValueAsString(errorMessageResponse);
         response.getWriter().write(body);
     }
 }
