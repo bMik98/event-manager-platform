@@ -48,7 +48,8 @@ class GeneralControllerTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .body(Map.of())
                 .exchange()
-                .expectStatus().isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
+                .expectStatus().isEqualTo(HttpStatus.METHOD_NOT_ALLOWED)
+                .expectBody(ErrorMessageResponse.class);
     }
 
     // ── 400: unreadable / type-mismatched request body ────────────────────────

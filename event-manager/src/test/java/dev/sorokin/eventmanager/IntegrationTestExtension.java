@@ -4,43 +4,45 @@ import dev.sorokin.eventmanager.config.DefaultAdminProperties;
 import dev.sorokin.eventmanager.controller.dto.AuthenticationRequest;
 import dev.sorokin.eventmanager.controller.dto.JwtResponse;
 import dev.sorokin.eventmanager.controller.dto.UserRegistrationRequest;
-import dev.sorokin.eventmanager.repository.LocationRepository;
-import dev.sorokin.eventmanager.repository.UserAccountRepository;
 import dev.sorokin.eventmanager.service.DefaultAdminInitializer;
 import org.jspecify.annotations.NonNull;
-import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
+import org.springframework.boot.test.util.TestPropertyValues;
 import org.springframework.context.ApplicationContext;
-import org.springframework.http.HttpHeaders;
+import org.springframework.context.ApplicationContextInitializer;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.test.web.servlet.client.RestTestClient;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-public class IntegrationTestExtension implements BeforeAllCallback, BeforeEachCallback {
+import java.util.Objects;
 
-    private static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:18-alpine");
+public class IntegrationTestExtension implements BeforeEachCallback {
+
+    private static final String TRUNCATE_ALL_TABLES = """
+            DO $$
+            BEGIN
+                EXECUTE (
+                    SELECT 'TRUNCATE TABLE ' || string_agg(quote_ident(tablename), ', ') || ' RESTART IDENTITY CASCADE'
+                    FROM pg_tables
+                    WHERE schemaname = 'public'
+                    AND tablename NOT IN ('databasechangelog', 'databasechangeloglock')
+                );
+            END $$
+            """;
+
+    static final PostgreSQLContainer POSTGRES;
 
     private static DefaultAdminProperties defaultAdminProperties;
 
-    @Override
-    public void beforeAll(@NonNull ExtensionContext context) {
-        if (!POSTGRES.isRunning()) {
-            POSTGRES.start();
-            System.setProperty("spring.datasource.url", POSTGRES.getJdbcUrl());
-            System.setProperty("spring.datasource.username", POSTGRES.getUsername());
-            System.setProperty("spring.datasource.password", POSTGRES.getPassword());
-        }
-    }
-
-    @Override
-    public void beforeEach(@NonNull ExtensionContext context) {
-        ApplicationContext ctx = SpringExtension.getApplicationContext(context);
-        defaultAdminProperties = ctx.getBean(DefaultAdminProperties.class);
-        ctx.getBean(LocationRepository.class).deleteAll();
-        ctx.getBean(UserAccountRepository.class).deleteAll();
-        ctx.getBean(DefaultAdminInitializer.class).createDefaultAdmin();
+    static {
+        POSTGRES = new PostgreSQLContainer("postgres:18-alpine")
+                .withReuse(true);
+        POSTGRES.start();
     }
 
     public static String obtainAdminToken(RestTestClient client) {
@@ -55,14 +57,15 @@ public class IntegrationTestExtension implements BeforeAllCallback, BeforeEachCa
     }
 
     public static String obtainToken(RestTestClient client, String login, String password) {
-        return client.post()
+        JwtResponse jwtResponse = client.post()
                 .uri("/users/auth")
                 .body(new AuthenticationRequest(login, password))
                 .exchange()
                 .expectBody(JwtResponse.class)
                 .returnResult()
-                .getResponseBody()
-                .jwtToken();
+                .getResponseBody();
+        String token = Objects.requireNonNull(jwtResponse).jwtToken();
+        return Objects.requireNonNull(token);
     }
 
     public static String registerAndObtainToken(RestTestClient client, String login, String password, int age) {
@@ -70,8 +73,23 @@ public class IntegrationTestExtension implements BeforeAllCallback, BeforeEachCa
         return obtainToken(client, login, password);
     }
 
-    public static RestTestClient.RequestHeadersSpec<?> withBearer(
-            RestTestClient.RequestHeadersSpec<?> spec, String token) {
-        return spec.header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
+    @Override
+    public void beforeEach(@NonNull ExtensionContext context) {
+        ApplicationContext ctx = SpringExtension.getApplicationContext(context);
+        defaultAdminProperties = ctx.getBean(DefaultAdminProperties.class);
+        new TransactionTemplate(ctx.getBean(PlatformTransactionManager.class))
+                .executeWithoutResult(tx -> ctx.getBean(JdbcTemplate.class).execute(TRUNCATE_ALL_TABLES));
+        ctx.getBean(DefaultAdminInitializer.class).createDefaultAdmin();
+    }
+
+    public static class PostgresInitializer implements ApplicationContextInitializer<ConfigurableApplicationContext> {
+        @Override
+        public void initialize(@NonNull ConfigurableApplicationContext context) {
+            TestPropertyValues.of(
+                    "spring.datasource.url=" + POSTGRES.getJdbcUrl(),
+                    "spring.datasource.username=" + POSTGRES.getUsername(),
+                    "spring.datasource.password=" + POSTGRES.getPassword()
+            ).applyTo(context);
+        }
     }
 }

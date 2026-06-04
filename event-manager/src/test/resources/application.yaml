@@ -1,0 +1,51 @@
+spring:
+  application:
+    name: event-manager-test
+
+  web:
+    error:
+      whitelabel:
+        enabled: false
+
+  datasource:
+    # Overridden at runtime by IntegrationTestExtension.PostgresInitializer
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: postgres
+    password: postgres
+    hikari:
+      autocommit: false
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
+
+  liquibase:
+    enabled: true
+    change-log: classpath:/db/changelog/changelog-master.yaml
+
+logging:
+  level:
+    root: WARN
+    dev.sorokin: INFO
+    org.springframework.web: INFO
+    org.springframework.security: WARN
+    liquibase: WARN
+
+password:
+  policy:
+    min-length: 8
+    max-length: 255
+    require-uppercase: true
+    require-lowercase: true
+    require-digit: true
+    require-special-char: true
+
+jwt:
+  secret: ZhIzthldLwm1rFCl9wLAV3/yiYohS8FoFF+HFZBeKk0=
+  expiration-in-millis: 3600000  # 1 hour — short enough to catch expiry bugs, long enough for tests
+
+default-admin:
+  login: admin
+  password: Admin1234!
