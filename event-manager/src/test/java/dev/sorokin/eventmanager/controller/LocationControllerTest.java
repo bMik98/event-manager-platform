@@ -1,286 +1,242 @@
 package dev.sorokin.eventmanager.controller;
 
-import dev.sorokin.eventmanager.IntegrationTest;
-import dev.sorokin.eventmanager.controller.dto.LocationRequestDto;
-import dev.sorokin.eventmanager.controller.dto.LocationResponseDto;
-import org.junit.jupiter.api.BeforeEach;
+import dev.sorokin.eventmanager.config.ControllerTestConfig;
+import dev.sorokin.eventmanager.service.LocationService;
+import dev.sorokin.eventmanager.service.exception.LocationNotFoundException;
+import dev.sorokin.eventmanager.service.model.Location;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpHeaders;
-import org.springframework.test.web.servlet.client.RestTestClient;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.stream.Stream;
 
-import static dev.sorokin.eventmanager.IntegrationTestExtension.obtainAdminToken;
-import static org.assertj.core.api.Assertions.assertThat;
+import static dev.sorokin.eventmanager.config.SecurityTestUsers.ADMIN;
+import static dev.sorokin.eventmanager.config.SecurityTestUsers.USER;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.when;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@IntegrationTest
+@WebMvcTest(LocationController.class)
+@Import(ControllerTestConfig.class)
 class LocationControllerTest {
 
-    private static final LocationRequestDto VALID_REQUEST =
-            new LocationRequestDto("Main Hall", "123 Main St", 100, "Main venue");
+    private static final Location LOCATION =
+            new Location(1L, "Main Hall", "123 Main St", 100, "Main venue");
 
-    @Autowired
-    RestTestClient restClient;
+    private static final String VALID_JSON = """
+            {"name":"Main Hall","address":"123 Main St","capacity":100,"description":"Main venue"}
+            """;
 
-    private String token;
+    @MockitoBean LocationService locationService;
 
-    @BeforeEach
-    void setUp() {
-        token = obtainAdminToken(restClient);
+    @Autowired MockMvc mockMvc;
+
+    @Nested
+    class GetAll {
+
+        @Test
+        void returns200WithList() throws Exception {
+            when(locationService.getAllLocations()).thenReturn(List.of(LOCATION));
+
+            mockMvc.perform(get("/locations").with(USER))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].id").value(1))
+                    .andExpect(jsonPath("$[0].name").value("Main Hall"))
+                    .andExpect(jsonPath("$[0].address").value("123 Main St"))
+                    .andExpect(jsonPath("$[0].capacity").value(100))
+                    .andExpect(jsonPath("$[0].description").value("Main venue"));
+        }
+
+        @Test
+        void returns200WithEmptyList() throws Exception {
+            when(locationService.getAllLocations()).thenReturn(List.of());
+
+            mockMvc.perform(get("/locations").with(USER))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(0));
+        }
     }
 
-    // ── GET /locations ────────────────────────────────────────────────────────
+    @Nested
+    class GetById {
 
-    @Test
-    void getAllLocations_authenticated_returns200WithList() {
-        createLocation(VALID_REQUEST);
+        @Test
+        void exists_returns200WithCorrectBody() throws Exception {
+            when(locationService.getLocation(1L)).thenReturn(LOCATION);
 
-        List<LocationResponseDto> body = restClient.get()
-                .uri("/locations")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(new ParameterizedTypeReference<List<LocationResponseDto>>() {})
-                .returnResult().getResponseBody();
+            mockMvc.perform(get("/locations/1").with(USER))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(1))
+                    .andExpect(jsonPath("$.name").value("Main Hall"))
+                    .andExpect(jsonPath("$.address").value("123 Main St"))
+                    .andExpect(jsonPath("$.capacity").value(100))
+                    .andExpect(jsonPath("$.description").value("Main venue"));
+        }
 
-        assertThat(body).hasSize(1);
-        assertThat(body.get(0).name()).isEqualTo("Main Hall");
+        @Test
+        void notFound_returns404WithErrorResponse() throws Exception {
+            when(locationService.getLocation(999L))
+                    .thenThrow(new LocationNotFoundException(999L));
+
+            mockMvc.perform(get("/locations/999").with(USER))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.message").value("Not found"))
+                    .andExpect(jsonPath("$.detailedMessage").isNotEmpty())
+                    .andExpect(jsonPath("$.timestamp").isNotEmpty());
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("invalidIds")
+        void invalidId_returns400WithValidationMessage(String reason, long id) throws Exception {
+            mockMvc.perform(get("/locations/{id}", id).with(USER))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("Validation failed"));
+        }
+
+        static Stream<Arguments> invalidIds() {
+            return Stream.of(
+                    arguments("negative", -1L),
+                    arguments("zero", 0L)
+            );
+        }
     }
 
-    @Test
-    void getAllLocations_emptyDatabase_returns200WithEmptyList() {
-        List<LocationResponseDto> body = restClient.get()
-                .uri("/locations")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(new ParameterizedTypeReference<List<LocationResponseDto>>() {})
-                .returnResult().getResponseBody();
+    @Nested
+    class Create {
 
-        assertThat(body).isEmpty();
+        @Test
+        void success_returns201WithBody() throws Exception {
+            when(locationService.createLocation(any())).thenReturn(LOCATION);
+
+            mockMvc.perform(post("/locations").with(ADMIN)
+                            .contentType(APPLICATION_JSON).content(VALID_JSON))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.id").value(1))
+                    .andExpect(jsonPath("$.name").value("Main Hall"))
+                    .andExpect(jsonPath("$.address").value("123 Main St"))
+                    .andExpect(jsonPath("$.capacity").value(100))
+                    .andExpect(jsonPath("$.description").value("Main venue"));
+        }
+
+        @Test
+        void withoutDescription_returns201WithNullDescription() throws Exception {
+            when(locationService.createLocation(any()))
+                    .thenReturn(new Location(2L, "Hall B", "456 Side St", 50, null));
+
+            mockMvc.perform(post("/locations").with(ADMIN)
+                            .contentType(APPLICATION_JSON)
+                            .content("""
+                                    {"name":"Hall B","address":"456 Side St","capacity":50}
+                                    """))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.description").value((Object) null));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("invalidRequests")
+        void invalidBody_returns400WithValidationMessage(String reason, String json) throws Exception {
+            mockMvc.perform(post("/locations").with(ADMIN)
+                            .contentType(APPLICATION_JSON).content(json))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("Validation failed"));
+        }
+
+        static Stream<Arguments> invalidRequests() {
+            return Stream.of(
+                    arguments("blank name", """
+                            {"name":"","address":"Addr","capacity":50}
+                            """),
+                    arguments("blank address", """
+                            {"name":"Hall","address":"","capacity":50}
+                            """),
+                    arguments("capacity too low", """
+                            {"name":"Hall","address":"Addr","capacity":1}
+                            """)
+            );
+        }
     }
 
-    @Test
-    void getAllLocations_unauthenticated_returns401() {
-        restClient.get()
-                .uri("/locations")
-                .exchange()
-                .expectStatus().isUnauthorized();
+    @Nested
+    class Update {
+
+        @Test
+        void success_returns200WithUpdatedBody() throws Exception {
+            var updated = new Location(1L, "Updated Hall", "999 New St", 200, "Updated desc");
+            when(locationService.updateLocation(eq(1L), any())).thenReturn(updated);
+
+            mockMvc.perform(put("/locations/1").with(ADMIN)
+                            .contentType(APPLICATION_JSON)
+                            .content("""
+                                    {"name":"Updated Hall","address":"999 New St","capacity":200,"description":"Updated desc"}
+                                    """))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(1))
+                    .andExpect(jsonPath("$.name").value("Updated Hall"))
+                    .andExpect(jsonPath("$.address").value("999 New St"))
+                    .andExpect(jsonPath("$.capacity").value(200))
+                    .andExpect(jsonPath("$.description").value("Updated desc"));
+        }
+
+        @Test
+        void notFound_returns404WithErrorResponse() throws Exception {
+            when(locationService.updateLocation(eq(999L), any()))
+                    .thenThrow(new LocationNotFoundException(999L));
+
+            mockMvc.perform(put("/locations/999").with(ADMIN)
+                            .contentType(APPLICATION_JSON).content(VALID_JSON))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.message").value("Not found"))
+                    .andExpect(jsonPath("$.detailedMessage").isNotEmpty());
+        }
+
+        @Test
+        void invalidBody_returns400WithValidationMessage() throws Exception {
+            mockMvc.perform(put("/locations/1").with(ADMIN)
+                            .contentType(APPLICATION_JSON)
+                            .content("""
+                                    {"name":"","address":"Addr","capacity":50}
+                                    """))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("Validation failed"));
+        }
     }
 
-    // ── GET /locations/{locationId} ───────────────────────────────────────────
+    @Nested
+    class Delete {
 
-    @Test
-    void getLocationById_exists_returns200WithCorrectBody() {
-        long id = createLocation(VALID_REQUEST);
+        @Test
+        void success_returns204() throws Exception {
+            mockMvc.perform(delete("/locations/1").with(ADMIN))
+                    .andExpect(status().isNoContent());
+        }
 
-        LocationResponseDto body = restClient.get()
-                .uri("/locations/{id}", id)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(LocationResponseDto.class)
-                .returnResult().getResponseBody();
+        @Test
+        void notFound_returns404WithErrorResponse() throws Exception {
+            doThrow(new LocationNotFoundException(999L))
+                    .when(locationService).deleteLocationById(999L);
 
-        assertThat(body).isNotNull();
-        assertThat(body.id()).isEqualTo(id);
-        assertThat(body.name()).isEqualTo("Main Hall");
-        assertThat(body.address()).isEqualTo("123 Main St");
-        assertThat(body.capacity()).isEqualTo(100);
-        assertThat(body.description()).isEqualTo("Main venue");
-    }
-
-    @Test
-    void getLocationById_notFound_returns404() {
-        restClient.get()
-                .uri("/locations/{id}", 999999)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .exchange()
-                .expectStatus().isNotFound();
-    }
-
-    @Test
-    void getLocationById_unauthenticated_returns401() {
-        restClient.get()
-                .uri("/locations/{id}", 1)
-                .exchange()
-                .expectStatus().isUnauthorized();
-    }
-
-    // ── POST /locations ───────────────────────────────────────────────────────
-
-    @Test
-    void createLocation_success_returns201WithBody() {
-        LocationResponseDto body = restClient.post()
-                .uri("/locations")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .body(VALID_REQUEST)
-                .exchange()
-                .expectStatus().isCreated()
-                .expectBody(LocationResponseDto.class)
-                .returnResult().getResponseBody();
-
-        assertThat(body).isNotNull();
-        assertThat(body.id()).isPositive();
-        assertThat(body.name()).isEqualTo("Main Hall");
-        assertThat(body.address()).isEqualTo("123 Main St");
-        assertThat(body.capacity()).isEqualTo(100);
-        assertThat(body.description()).isEqualTo("Main venue");
-    }
-
-    @Test
-    void createLocation_withoutDescription_returns201WithNullDescription() {
-        LocationResponseDto body = restClient.post()
-                .uri("/locations")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .body(new LocationRequestDto("Hall B", "456 Side St", 50, null))
-                .exchange()
-                .expectStatus().isCreated()
-                .expectBody(LocationResponseDto.class)
-                .returnResult().getResponseBody();
-
-        assertThat(body.description()).isNull();
-    }
-
-    @Test
-    void createLocation_capacityBelowMinimum_returns400() {
-        restClient.post()
-                .uri("/locations")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .body(new LocationRequestDto("Tiny Room", "789 Back St", 1, null))
-                .exchange()
-                .expectStatus().isBadRequest();
-    }
-
-    @Test
-    void createLocation_blankName_returns400() {
-        restClient.post()
-                .uri("/locations")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .body(new LocationRequestDto("", "789 Back St", 50, null))
-                .exchange()
-                .expectStatus().isBadRequest();
-    }
-
-    @Test
-    void createLocation_blankAddress_returns400() {
-        restClient.post()
-                .uri("/locations")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .body(new LocationRequestDto("Hall C", "", 50, null))
-                .exchange()
-                .expectStatus().isBadRequest();
-    }
-
-    @Test
-    void createLocation_unauthenticated_returns401() {
-        restClient.post()
-                .uri("/locations")
-                .body(VALID_REQUEST)
-                .exchange()
-                .expectStatus().isUnauthorized();
-    }
-
-    // ── PUT /locations/{locationId} ───────────────────────────────────────────
-
-    @Test
-    void updateLocation_success_returns200WithUpdatedBody() {
-        long id = createLocation(VALID_REQUEST);
-
-        LocationResponseDto body = restClient.put()
-                .uri("/locations/{id}", id)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .body(new LocationRequestDto("Updated Hall", "999 New St", 200, "Updated desc"))
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(LocationResponseDto.class)
-                .returnResult().getResponseBody();
-
-        assertThat(body).isNotNull();
-        assertThat(body.id()).isEqualTo(id);
-        assertThat(body.name()).isEqualTo("Updated Hall");
-        assertThat(body.address()).isEqualTo("999 New St");
-        assertThat(body.capacity()).isEqualTo(200);
-    }
-
-    @Test
-    void updateLocation_notFound_returns404() {
-        restClient.put()
-                .uri("/locations/{id}", 999999)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .body(new LocationRequestDto("Hall", "Addr", 50, null))
-                .exchange()
-                .expectStatus().isNotFound();
-    }
-
-    @Test
-    void updateLocation_invalidBody_returns400() {
-        long id = createLocation(VALID_REQUEST);
-
-        restClient.put()
-                .uri("/locations/{id}", id)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .body(new LocationRequestDto("", "Addr", 50, null))
-                .exchange()
-                .expectStatus().isBadRequest();
-    }
-
-    @Test
-    void updateLocation_unauthenticated_returns401() {
-        restClient.put()
-                .uri("/locations/{id}", 1)
-                .body(new LocationRequestDto("Hall", "Addr", 50, null))
-                .exchange()
-                .expectStatus().isUnauthorized();
-    }
-
-    // ── DELETE /locations/{locationId} ────────────────────────────────────────
-
-    @Test
-    void deleteLocation_success_returns204AndLocationIsGone() {
-        long id = createLocation(VALID_REQUEST);
-
-        restClient.delete()
-                .uri("/locations/{id}", id)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .exchange()
-                .expectStatus().isNoContent();
-
-        restClient.get()
-                .uri("/locations/{id}", id)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .exchange()
-                .expectStatus().isNotFound();
-    }
-
-    @Test
-    void deleteLocation_notFound_returns404() {
-        restClient.delete()
-                .uri("/locations/{id}", 999999)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .exchange()
-                .expectStatus().isNotFound();
-    }
-
-    @Test
-    void deleteLocation_unauthenticated_returns401() {
-        restClient.delete()
-                .uri("/locations/{id}", 1)
-                .exchange()
-                .expectStatus().isUnauthorized();
-    }
-
-    // ── helpers ───────────────────────────────────────────────────────────────
-
-    private long createLocation(LocationRequestDto dto) {
-        return restClient.post()
-                .uri("/locations")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .body(dto)
-                .exchange()
-                .expectBody(LocationResponseDto.class)
-                .returnResult().getResponseBody().id();
+            mockMvc.perform(delete("/locations/999").with(ADMIN))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.message").value("Not found"))
+                    .andExpect(jsonPath("$.detailedMessage").isNotEmpty());
+        }
     }
 }

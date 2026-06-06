@@ -3,6 +3,7 @@ package dev.sorokin.eventmanager.controller.dto;
 import dev.sorokin.eventmanager.service.model.UserAccount;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 import java.io.Serializable;
 
@@ -16,7 +17,7 @@ public record AuthenticationRequest(
         @NotBlank String login,
 
         @Schema(description = "User password")
-        @NotBlank String password
+        @NotBlank @NotNull String password
 
 ) implements Serializable {
 }

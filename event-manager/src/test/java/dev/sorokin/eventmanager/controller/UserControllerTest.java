@@ -1,115 +1,119 @@
 package dev.sorokin.eventmanager.controller;
 
-import dev.sorokin.eventmanager.IntegrationTest;
-import dev.sorokin.eventmanager.controller.dto.UserRegistrationRequest;
-import dev.sorokin.eventmanager.controller.dto.UserResponseDto;
-import org.junit.jupiter.api.BeforeEach;
+import dev.sorokin.eventmanager.config.ControllerTestConfig;
+import dev.sorokin.eventmanager.service.UserAccountService;
+import dev.sorokin.eventmanager.service.exception.UserNotFoundException;
+import dev.sorokin.eventmanager.service.model.UserAccount;
+import dev.sorokin.eventmanager.service.model.UserRole;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpHeaders;
-import org.springframework.test.web.servlet.client.RestTestClient;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.stream.Stream;
 
-import static dev.sorokin.eventmanager.IntegrationTestExtension.obtainAdminToken;
-import static org.assertj.core.api.Assertions.assertThat;
+import static dev.sorokin.eventmanager.config.SecurityTestUsers.ADMIN;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@IntegrationTest
+@WebMvcTest(UserController.class)
+@Import(ControllerTestConfig.class)
 class UserControllerTest {
 
-    private static final String LOGIN = "userctrl";
-    private static final String PASSWORD = "Password1!";
-    private static final int AGE = 30;
+    private static final UserAccount USER_ACCOUNT =
+            new UserAccount(2L, "userctrl", "hash", UserRole.USER, 30);
 
-    @Autowired
-    RestTestClient restClient;
+    @MockitoBean UserAccountService userAccountService;
 
-    private String token;
-    private Long userId;
+    @Autowired MockMvc mockMvc;
 
-    @BeforeEach
-    void setUp() {
-        UserResponseDto registered = restClient.post()
-                .uri("/users")
-                .body(new UserRegistrationRequest(LOGIN, PASSWORD, AGE))
-                .exchange()
-                .expectBody(UserResponseDto.class)
-                .returnResult().getResponseBody();
+    @Nested
+    class GetAll {
 
-        userId = registered.id();
-        token = obtainAdminToken(restClient);
+        @Test
+        void returns200WithList() throws Exception {
+            when(userAccountService.getAllUsers()).thenReturn(List.of(
+                    new UserAccount(1L, "admin", "hash", UserRole.ADMIN, 40),
+                    USER_ACCOUNT
+            ));
+
+            mockMvc.perform(get("/users").with(ADMIN))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(2))
+                    .andExpect(jsonPath("$[0].id").value(1))
+                    .andExpect(jsonPath("$[0].login").value("admin"))
+                    .andExpect(jsonPath("$[0].role").value("ADMIN"))
+                    .andExpect(jsonPath("$[0].age").value(40))
+                    .andExpect(jsonPath("$[1].id").value(2))
+                    .andExpect(jsonPath("$[1].login").value("userctrl"))
+                    .andExpect(jsonPath("$[1].role").value("USER"))
+                    .andExpect(jsonPath("$[1].age").value(30))
+                    // password hash must never be exposed
+                    .andExpect(jsonPath("$[0].passwordHash").doesNotExist())
+                    .andExpect(jsonPath("$[1].passwordHash").doesNotExist());
+        }
+
+        @Test
+        void returns200WithEmptyList() throws Exception {
+            when(userAccountService.getAllUsers()).thenReturn(List.of());
+
+            mockMvc.perform(get("/users").with(ADMIN))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(0));
+        }
     }
 
-    // ── GET /users ────────────────────────────────────────────────────────────
+    @Nested
+    class GetById {
 
-    @Test
-    void getUsers_authenticated_returns200WithList() {
-        List<UserResponseDto> body = restClient.get()
-                .uri("/users")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(new ParameterizedTypeReference<List<UserResponseDto>>() {
-                })
-                .returnResult().getResponseBody();
+        @Test
+        void exists_returns200WithCorrectBody() throws Exception {
+            when(userAccountService.getUser(2L)).thenReturn(USER_ACCOUNT);
 
-        assertThat(body).hasSize(2)
-                .anySatisfy(user -> {
-                    assertThat(user.login()).isEqualTo(LOGIN);
-                    assertThat(user.age()).isEqualTo(AGE);
-                });
-    }
+            mockMvc.perform(get("/users/2").with(ADMIN))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(2))
+                    .andExpect(jsonPath("$.login").value("userctrl"))
+                    .andExpect(jsonPath("$.role").value("USER"))
+                    .andExpect(jsonPath("$.age").value(30))
+                    .andExpect(jsonPath("$.passwordHash").doesNotExist());
+        }
 
-    @Test
-    void getUsers_unauthenticated_returns401() {
-        restClient.get()
-                .uri("/users")
-                .exchange()
-                .expectStatus().isUnauthorized();
-    }
+        @Test
+        void notFound_returns404WithErrorResponse() throws Exception {
+            when(userAccountService.getUser(999L))
+                    .thenThrow(new UserNotFoundException(999L));
 
-    // ── GET /users/{userId} ───────────────────────────────────────────────────
+            mockMvc.perform(get("/users/999").with(ADMIN))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.message").value("Not found"))
+                    .andExpect(jsonPath("$.detailedMessage").isNotEmpty())
+                    .andExpect(jsonPath("$.timestamp").isNotEmpty());
+        }
 
-    @Test
-    void getUserById_exists_returns200WithCorrectBody() {
-        UserResponseDto body = restClient.get()
-                .uri("/users/{id}", userId)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(UserResponseDto.class)
-                .returnResult().getResponseBody();
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("invalidIds")
+        void invalidId_returns400WithValidationMessage(String reason, long id) throws Exception {
+            mockMvc.perform(get("/users/{id}", id).with(ADMIN))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("Validation failed"));
+        }
 
-        assertThat(body).isNotNull();
-        assertThat(body.id()).isEqualTo(userId);
-        assertThat(body.login()).isEqualTo(LOGIN);
-        assertThat(body.age()).isEqualTo(AGE);
-    }
-
-    @Test
-    void getUserById_notFound_returns404() {
-        restClient.get()
-                .uri("/users/{id}", 999999)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .exchange()
-                .expectStatus().isNotFound();
-    }
-
-    @Test
-    void getUserById_unauthenticated_returns401() {
-        restClient.get()
-                .uri("/users/{id}", userId)
-                .exchange()
-                .expectStatus().isUnauthorized();
-    }
-
-    @Test
-    void getUserById_negativeId_returns400() {
-        restClient.get()
-                .uri("/users/{id}", -1)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .exchange()
-                .expectStatus().isBadRequest();
+        static Stream<Arguments> invalidIds() {
+            return Stream.of(
+                    arguments("negative", -1L),
+                    arguments("zero", 0L)
+            );
+        }
     }
 }

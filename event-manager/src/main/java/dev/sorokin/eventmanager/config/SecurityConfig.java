@@ -1,6 +1,7 @@
 package dev.sorokin.eventmanager.config;
 
 import dev.sorokin.eventmanager.security.JwtAuthFilter;
+import dev.sorokin.eventmanager.service.model.UserRole;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -54,12 +55,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/users/auth").permitAll()
                         .requestMatchers(HttpMethod.POST, "/users").permitAll()
 
-                        .requestMatchers(HttpMethod.GET, "/users/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/**").hasRole(UserRole.ADMIN.name())
 
-                        .requestMatchers(HttpMethod.GET, "/locations/**").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers("/locations/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/locations/**").hasAnyRole(UserRole.USER.name(), UserRole.ADMIN.name())
+                        .requestMatchers("/locations/**").hasRole(UserRole.ADMIN.name())
 
-                        .anyRequest().denyAll()
+                        .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();

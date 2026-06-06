@@ -3,7 +3,6 @@ package dev.sorokin.eventmanager.controller.advice;
 import dev.sorokin.eventmanager.common.exception.ItemAlreadyExistsException;
 import dev.sorokin.eventmanager.common.exception.ItemNotFoundException;
 import jakarta.validation.ConstraintViolationException;
-import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -14,6 +13,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -23,10 +23,10 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    public static final String VALIDATION_FAILED = "Validation failed";
-    public static final String UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
-    public static final String NOT_FOUND = "Not found";
-    public static final String CONFLICT = "Conflict";
+    private static final String VALIDATION_FAILED = "Validation failed";
+    private static final String UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
+    private static final String NOT_FOUND = "Not found";
+    private static final String CONFLICT = "Conflict";
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorMessageResponse> handleValidationException(MethodArgumentNotValidException ex) {

@@ -1,175 +1,203 @@
 package dev.sorokin.eventmanager.controller;
 
-import dev.sorokin.eventmanager.IntegrationTest;
-import dev.sorokin.eventmanager.controller.dto.AuthenticationRequest;
-import dev.sorokin.eventmanager.controller.dto.JwtResponse;
-import dev.sorokin.eventmanager.controller.dto.UserRegistrationRequest;
-import dev.sorokin.eventmanager.controller.dto.UserResponseDto;
+import dev.sorokin.eventmanager.config.ControllerTestConfig;
+import dev.sorokin.eventmanager.config.PasswordPolicyProperties;
+import dev.sorokin.eventmanager.security.JwtAuthService;
+import dev.sorokin.eventmanager.service.UserAccountService;
+import dev.sorokin.eventmanager.service.exception.UserAlreadyExistsException;
+import dev.sorokin.eventmanager.service.exception.UserNotFoundException;
+import dev.sorokin.eventmanager.service.model.UserAccount;
 import dev.sorokin.eventmanager.service.model.UserRole;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.test.web.servlet.client.RestTestClient;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
 
-import static dev.sorokin.eventmanager.IntegrationTestExtension.registerUser;
-import static org.assertj.core.api.Assertions.assertThat;
+import java.util.stream.Stream;
 
-@IntegrationTest
+import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@WebMvcTest(AuthController.class)
+@Import(ControllerTestConfig.class)
+@EnableConfigurationProperties(PasswordPolicyProperties.class)
 class AuthControllerTest {
 
-    private static final String LOGIN = "authuser";
-    private static final String PASSWORD = "Password1!";
-    private static final int AGE = 25;
+    @MockitoBean UserAccountService userAccountService;
+    @MockitoBean PasswordEncoder passwordEncoder;
 
-    @Autowired
-    RestTestClient restClient;
+    // Provided as a Mockito mock by SecurityTestConfig — autowired here so it can be stubbed.
+    @Autowired JwtAuthService jwtAuthService;
 
-    // ── POST /users (register) ────────────────────────────────────────────────
+    @Autowired MockMvc mockMvc;
 
-    @Test
-    void registerUser_success_returns201WithUserDto() {
-        UserResponseDto body = restClient.post()
-                .uri("/users")
-                .body(new UserRegistrationRequest(LOGIN, PASSWORD, AGE))
-                .exchange()
-                .expectStatus().isCreated()
-                .expectBody(UserResponseDto.class)
-                .returnResult().getResponseBody();
+    @Nested
+    class Register {
 
-        assertThat(body).isNotNull();
-        assertThat(body.id()).isPositive();
-        assertThat(body.login()).isEqualTo(LOGIN);
-        assertThat(body.age()).isEqualTo(AGE);
-        assertThat(body.role()).isEqualTo(UserRole.USER);
+        @Test
+        void success_returns201WithUserDto() throws Exception {
+            when(passwordEncoder.encode(any())).thenReturn("hash");
+            when(userAccountService.createUser(any()))
+                    .thenReturn(new UserAccount(1L, "authuser", "hash", UserRole.USER, 25));
+
+            mockMvc.perform(post("/users")
+                            .contentType(APPLICATION_JSON)
+                            .content("""
+                                    {"login":"authuser","password":"Password1!","age":25}
+                                    """))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.id").value(1))
+                    .andExpect(jsonPath("$.login").value("authuser"))
+                    .andExpect(jsonPath("$.role").value("USER"))
+                    .andExpect(jsonPath("$.age").value(25))
+                    .andExpect(jsonPath("$.password").doesNotExist())
+                    .andExpect(jsonPath("$.passwordHash").doesNotExist());
+        }
+
+        @Test
+        void duplicateLogin_returns409WithConflictMessage() throws Exception {
+            when(passwordEncoder.encode(any())).thenReturn("hash");
+            when(userAccountService.createUser(any()))
+                    .thenThrow(new UserAlreadyExistsException("authuser"));
+
+            mockMvc.perform(post("/users")
+                            .contentType(APPLICATION_JSON)
+                            .content("""
+                                    {"login":"authuser","password":"Password1!","age":25}
+                                    """))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.message").value("Conflict"))
+                    .andExpect(jsonPath("$.detailedMessage").isNotEmpty())
+                    .andExpect(jsonPath("$.timestamp").isNotEmpty());
+        }
+
+        @Test
+        void underageUser_returns400WithValidationMessage() throws Exception {
+            mockMvc.perform(post("/users")
+                            .contentType(APPLICATION_JSON)
+                            .content("""
+                                    {"login":"authuser","password":"Password1!","age":17}
+                                    """))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("Validation failed"));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("invalidRequests")
+        void invalidRequest_returns400(String reason, String json) throws Exception {
+            mockMvc.perform(post("/users")
+                            .contentType(APPLICATION_JSON)
+                            .content(json))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("Validation failed"));
+        }
+
+        static Stream<Arguments> invalidRequests() {
+            return Stream.of(
+                    arguments("blank login", """
+                            {"login":"","password":"Password1!","age":25}
+                            """),
+                    arguments("login too short", """
+                            {"login":"ab","password":"Password1!","age":25}
+                            """),
+                    arguments("no uppercase", """
+                            {"login":"user","password":"password1!","age":25}
+                            """),
+                    arguments("no lowercase", """
+                            {"login":"user","password":"PASSWORD1!","age":25}
+                            """),
+                    arguments("no digit", """
+                            {"login":"user","password":"Password!","age":25}
+                            """),
+                    arguments("no special char", """
+                            {"login":"user","password":"Password1","age":25}
+                            """),
+                    arguments("password too short", """
+                            {"login":"user","password":"Pa1!","age":25}
+                            """)
+            );
+        }
     }
 
-    @Test
-    void registerUser_duplicateLogin_returns400() {
-        registerUser(restClient, LOGIN, PASSWORD, AGE);
+    @Nested
+    class Authenticate {
 
-        restClient.post()
-                .uri("/users")
-                .body(new UserRegistrationRequest(LOGIN, PASSWORD, AGE))
-                .exchange()
-                .expectStatus().isEqualTo(HttpStatus.CONFLICT);
-    }
+        @Test
+        void success_returns200WithJwtToken() throws Exception {
+            when(userAccountService.getUserByLogin("authuser"))
+                    .thenReturn(new UserAccount(1L, "authuser", "hash", UserRole.USER, 25));
+            when(passwordEncoder.matches("Password1!", "hash")).thenReturn(true);
+            when(jwtAuthService.generateToken("authuser")).thenReturn("test.jwt.token");
 
-    @Test
-    void registerUser_passwordWithoutUppercase_returns400() {
-        restClient.post()
-                .uri("/users")
-                .body(new UserRegistrationRequest(LOGIN, "password1!", AGE))
-                .exchange()
-                .expectStatus().isBadRequest();
-    }
+            mockMvc.perform(post("/users/auth")
+                            .contentType(APPLICATION_JSON)
+                            .content("""
+                                    {"login":"authuser","password":"Password1!"}
+                                    """))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.jwtToken").value("test.jwt.token"));
+        }
 
-    @Test
-    void registerUser_passwordWithoutDigit_returns400() {
-        restClient.post()
-                .uri("/users")
-                .body(new UserRegistrationRequest(LOGIN, "Password!", AGE))
-                .exchange()
-                .expectStatus().isBadRequest();
-    }
+        @Test
+        void wrongPassword_returns400() throws Exception {
+            when(userAccountService.getUserByLogin("authuser"))
+                    .thenReturn(new UserAccount(1L, "authuser", "hash", UserRole.USER, 25));
+            when(passwordEncoder.matches("WrongPass1!", "hash")).thenReturn(false);
 
-    @Test
-    void registerUser_passwordWithoutSpecialChar_returns400() {
-        restClient.post()
-                .uri("/users")
-                .body(new UserRegistrationRequest(LOGIN, "Password1", AGE))
-                .exchange()
-                .expectStatus().isBadRequest();
-    }
+            mockMvc.perform(post("/users/auth")
+                            .contentType(APPLICATION_JSON)
+                            .content("""
+                                    {"login":"authuser","password":"WrongPass1!"}
+                                    """))
+                    .andExpect(status().isBadRequest());
+        }
 
-    @Test
-    void registerUser_passwordTooShort_returns400() {
-        restClient.post()
-                .uri("/users")
-                .body(new UserRegistrationRequest(LOGIN, "Pa1!", AGE))
-                .exchange()
-                .expectStatus().isBadRequest();
-    }
+        @Test
+        void nonExistentUser_returns404WithNotFoundMessage() throws Exception {
+            when(userAccountService.getUserByLogin("nobody"))
+                    .thenThrow(new UserNotFoundException("nobody"));
 
-    @Test
-    void registerUser_underageUser_returns400() {
-        restClient.post()
-                .uri("/users")
-                .body(new UserRegistrationRequest(LOGIN, PASSWORD, 17))
-                .exchange()
-                .expectStatus().isBadRequest();
-    }
+            mockMvc.perform(post("/users/auth")
+                            .contentType(APPLICATION_JSON)
+                            .content("""
+                                    {"login":"nobody","password":"Password1!"}
+                                    """))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.message").value("Not found"))
+                    .andExpect(jsonPath("$.detailedMessage").isNotEmpty());
+        }
 
-    @Test
-    void registerUser_blankLogin_returns400() {
-        restClient.post()
-                .uri("/users")
-                .body(new UserRegistrationRequest("", PASSWORD, AGE))
-                .exchange()
-                .expectStatus().isBadRequest();
-    }
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("blankCredentials")
+        void blankCredentials_returns400(String reason, String json) throws Exception {
+            mockMvc.perform(post("/users/auth")
+                            .contentType(APPLICATION_JSON)
+                            .content(json))
+                    .andExpect(status().isBadRequest());
+        }
 
-    @Test
-    void registerUser_loginTooShort_returns400() {
-        restClient.post()
-                .uri("/users")
-                .body(new UserRegistrationRequest("ab", PASSWORD, AGE))
-                .exchange()
-                .expectStatus().isBadRequest();
-    }
-
-    // ── POST /users/auth (authenticate) ──────────────────────────────────────
-
-    @Test
-    void authenticateUser_success_returnsJwtToken() {
-        registerUser(restClient, LOGIN, PASSWORD, AGE);
-
-        JwtResponse body = restClient.post()
-                .uri("/users/auth")
-                .body(new AuthenticationRequest(LOGIN, PASSWORD))
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(JwtResponse.class)
-                .returnResult().getResponseBody();
-
-        assertThat(body).isNotNull();
-        assertThat(body.jwtToken()).isNotBlank();
-    }
-
-    @Test
-    void authenticateUser_wrongPassword_returns400() {
-        registerUser(restClient, LOGIN, PASSWORD, AGE);
-
-        restClient.post()
-                .uri("/users/auth")
-                .body(new AuthenticationRequest(LOGIN, "WrongPass1!"))
-                .exchange()
-                .expectStatus().isBadRequest();
-    }
-
-    @Test
-    void authenticateUser_nonExistentUser_returns404() {
-        restClient.post()
-                .uri("/users/auth")
-                .body(new AuthenticationRequest("nobody", PASSWORD))
-                .exchange()
-                .expectStatus().isNotFound();
-    }
-
-    @Test
-    void authenticateUser_blankLogin_returns400() {
-        restClient.post()
-                .uri("/users/auth")
-                .body(new AuthenticationRequest("", PASSWORD))
-                .exchange()
-                .expectStatus().isBadRequest();
-    }
-
-    @Test
-    void authenticateUser_blankPassword_returns400() {
-        restClient.post()
-                .uri("/users/auth")
-                .body(new AuthenticationRequest(LOGIN, ""))
-                .exchange()
-                .expectStatus().isBadRequest();
+        static Stream<Arguments> blankCredentials() {
+            return Stream.of(
+                    arguments("blank login", """
+                            {"login":"","password":"Password1!"}
+                            """),
+                    arguments("blank password", """
+                            {"login":"authuser","password":""}
+                            """)
+            );
+        }
     }
 }

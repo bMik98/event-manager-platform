@@ -1,4 +1,4 @@
-package dev.sorokin.eventmanager;
+package dev.sorokin.eventmanager.config;
 
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;

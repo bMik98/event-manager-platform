@@ -1,9 +1,7 @@
-package dev.sorokin.eventmanager;
+package dev.sorokin.eventmanager.config;
 
-import dev.sorokin.eventmanager.config.DefaultAdminProperties;
 import dev.sorokin.eventmanager.controller.dto.AuthenticationRequest;
 import dev.sorokin.eventmanager.controller.dto.JwtResponse;
-import dev.sorokin.eventmanager.controller.dto.UserRegistrationRequest;
 import dev.sorokin.eventmanager.service.DefaultAdminInitializer;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
@@ -14,15 +12,16 @@ import org.springframework.context.ApplicationContextInitializer;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
+import org.springframework.test.web.servlet.client.RestTestClient;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.springframework.test.web.servlet.client.RestTestClient;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.util.Objects;
 
 public class IntegrationTestExtension implements BeforeEachCallback {
 
+    static final PostgreSQLContainer POSTGRES;
     private static final String TRUNCATE_ALL_TABLES = """
             DO $$
             BEGIN
@@ -34,9 +33,6 @@ public class IntegrationTestExtension implements BeforeEachCallback {
                 );
             END $$
             """;
-
-    static final PostgreSQLContainer POSTGRES;
-
     private static DefaultAdminProperties defaultAdminProperties;
 
     static {
@@ -47,13 +43,6 @@ public class IntegrationTestExtension implements BeforeEachCallback {
 
     public static String obtainAdminToken(RestTestClient client) {
         return obtainToken(client, defaultAdminProperties.login(), defaultAdminProperties.password());
-    }
-
-    public static void registerUser(RestTestClient client, String login, String password, int age) {
-        client.post()
-                .uri("/users")
-                .body(new UserRegistrationRequest(login, password, age))
-                .exchange();
     }
 
     public static String obtainToken(RestTestClient client, String login, String password) {
@@ -68,17 +57,12 @@ public class IntegrationTestExtension implements BeforeEachCallback {
         return Objects.requireNonNull(token);
     }
 
-    public static String registerAndObtainToken(RestTestClient client, String login, String password, int age) {
-        registerUser(client, login, password, age);
-        return obtainToken(client, login, password);
-    }
-
     @Override
     public void beforeEach(@NonNull ExtensionContext context) {
         ApplicationContext ctx = SpringExtension.getApplicationContext(context);
         defaultAdminProperties = ctx.getBean(DefaultAdminProperties.class);
         new TransactionTemplate(ctx.getBean(PlatformTransactionManager.class))
-                .executeWithoutResult(tx -> ctx.getBean(JdbcTemplate.class).execute(TRUNCATE_ALL_TABLES));
+                .executeWithoutResult(_ -> ctx.getBean(JdbcTemplate.class).execute(TRUNCATE_ALL_TABLES));
         ctx.getBean(DefaultAdminInitializer.class).createDefaultAdmin();
     }
 
