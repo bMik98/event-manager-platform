@@ -42,3 +42,8 @@ docs/*
 !docs/openapi/
 !docs/openapi/**
 diagrams/
+
+### Local secrets / overrides ###
+**/application-local.yaml
+**/application-local.yml
+.env

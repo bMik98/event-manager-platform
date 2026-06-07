@@ -49,9 +49,9 @@ password:
     require-special-char: true
 
 jwt:
-  secret: ZhIzthldLwm1rFCl9wLAV3/yiYohS8FoFF+HFZBeKk0=
-  expiration-in-millis: 86400000   # 24 hours in milliseconds
+  secret: ${JWT_SECRET}
+  expiration-in-millis: ${JWT_EXPIRATION_MILLIS:86400000}   # 24 hours in milliseconds
 
 default-admin:
-  login: admin
-  password: Admin1234!
+  login: ${DEFAULT_ADMIN_LOGIN:admin}
+  password: ${DEFAULT_ADMIN_PASSWORD}

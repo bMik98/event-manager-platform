@@ -43,7 +43,8 @@ password:
     require-special-char: true
 
 jwt:
-  secret: ZhIzthldLwm1rFCl9wLAV3/yiYohS8FoFF+HFZBeKk0=
+  # Throwaway, test-only signing key. Not a production secret.
+  secret: JwQHkUgoibFD2DC/zcK6R+Fwg9jO6YZ74grDS+ovWCA=
   expiration-in-millis: 3600000  # 1 hour — short enough to catch expiry bugs, long enough for tests
 
 default-admin:
