@@ -5,9 +5,9 @@ import dev.sorokin.eventmanager.repository.entity.LocationEntity;
 import dev.sorokin.eventmanager.repository.mapper.LocationDbMapper;
 import dev.sorokin.eventmanager.service.exception.LocationNotFoundException;
 import dev.sorokin.eventmanager.service.model.Location;
-import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -42,14 +42,14 @@ public class LocationService {
         locationRepository.deleteById(locationId);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public Location getLocation(Long id) {
         LocationEntity entity = locationRepository.findById(id)
                 .orElseThrow(() -> new LocationNotFoundException(id));
         return mapper.toDomain(entity);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<Location> getAllLocations() {
         List<LocationEntity> entities = locationRepository.findAll();
         return mapper.toDomain(entities);

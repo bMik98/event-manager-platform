@@ -16,7 +16,8 @@ import lombok.Setter;
 @NoArgsConstructor
 public class LocationEntity {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "locations_id_gen")
+    @SequenceGenerator(name = "locations_id_gen", sequenceName = "locations_id_seq", allocationSize = 1)
     @Column(name = "id", nullable = false)
     private Long id;
 

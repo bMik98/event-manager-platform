@@ -7,9 +7,9 @@ import dev.sorokin.eventmanager.service.exception.UserAlreadyExistsException;
 import dev.sorokin.eventmanager.service.exception.UserNotFoundException;
 import dev.sorokin.eventmanager.service.model.UserAccount;
 import dev.sorokin.eventmanager.service.model.UserRole;
-import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -30,26 +30,26 @@ public class UserAccountService {
         return mapper.toDomain(createdUser);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public boolean hasAdminAccount() {
         return userAccountRepository.existsByRole(UserRole.ADMIN);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public UserAccount getUser(Long id) {
         UserEntity entity = userAccountRepository.findById(id)
                 .orElseThrow(() -> new UserNotFoundException(id));
         return mapper.toDomain(entity);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public UserAccount getUserByLogin(String login) {
         UserEntity entity = userAccountRepository.findByLogin(login)
                 .orElseThrow(() -> new UserNotFoundException(login));
         return mapper.toDomain(entity);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<UserAccount> getAllUsers() {
         List<UserEntity> entities = userAccountRepository.findAll();
         return mapper.toDomain(entities);
