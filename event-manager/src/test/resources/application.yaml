@@ -1,9 +1,6 @@
-server:
-  port: 8080
-
 spring:
   application:
-    name: event-manager
+    name: event-manager-test
 
   web:
     error:
@@ -11,7 +8,7 @@ spring:
         enabled: false
 
   datasource:
-    #    url: jdbc:postgresql://localhost:5432/event_manager
+    # Overridden at runtime by IntegrationTestExtension.PostgresInitializer
     url: jdbc:postgresql://localhost:5432/postgres
     username: postgres
     password: postgres
@@ -22,7 +19,7 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-    show-sql: true
+    show-sql: false
 
   liquibase:
     enabled: true
@@ -30,14 +27,11 @@ spring:
 
 logging:
   level:
-    root: INFO
+    root: WARN
+    dev.sorokin: INFO
     org.springframework.web: INFO
-
-springdoc:
-  swagger-ui:
-    operations-sorter: method
-    tags-sorter: alpha
-    path: /swagger-ui/index.html
+    org.springframework.security: WARN
+    liquibase: WARN
 
 password:
   policy:
@@ -49,9 +43,10 @@ password:
     require-special-char: true
 
 jwt:
-  secret: ${JWT_SECRET}
-  expiration-in-millis: ${JWT_EXPIRATION_MILLIS:86400000}   # 24 hours in milliseconds
+  # Throwaway, test-only signing key. Not a production secret.
+  secret: JwQHkUgoibFD2DC/zcK6R+Fwg9jO6YZ74grDS+ovWCA=
+  expiration-in-millis: 3600000  # 1 hour — short enough to catch expiry bugs, long enough for tests
 
 default-admin:
-  login: ${DEFAULT_ADMIN_LOGIN:admin}
-  password: ${DEFAULT_ADMIN_PASSWORD}
+  login: admin
+  password: Admin1234!

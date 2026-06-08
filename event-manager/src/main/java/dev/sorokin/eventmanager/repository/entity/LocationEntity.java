@@ -1,7 +1,9 @@
 package dev.sorokin.eventmanager.repository.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -14,21 +16,23 @@ import lombok.Setter;
 @NoArgsConstructor
 public class LocationEntity {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "locations_id_gen")
+    @SequenceGenerator(name = "locations_id_gen", sequenceName = "locations_id_seq", allocationSize = 1)
     @Column(name = "id", nullable = false)
     private Long id;
 
     @Size(max = 255)
-    @NotNull
+    @NotBlank
     @Column(name = "name", nullable = false)
     private String name;
 
     @Size(max = 500)
-    @NotNull
+    @NotBlank
     @Column(name = "address", nullable = false, length = 500)
     private String address;
 
     @NotNull
+    @Positive
     @Column(name = "capacity", nullable = false)
     private Integer capacity;
 
