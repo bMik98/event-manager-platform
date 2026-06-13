@@ -1,11 +1,12 @@
 package dev.sorokin.eventmanager.controller;
 
+import dev.sorokin.eventmanager.service.exception.InvalidCommandException;
 import dev.sorokin.eventmanager.config.ControllerTestConfig;
 import dev.sorokin.eventmanager.config.PasswordPolicyProperties;
 import dev.sorokin.eventmanager.security.JwtAuthService;
 import dev.sorokin.eventmanager.service.UserAccountService;
 import dev.sorokin.eventmanager.service.exception.UserAlreadyExistsException;
-import dev.sorokin.eventmanager.service.exception.UserNotFoundException;
+import dev.sorokin.eventmanager.common.exception.UserNotFoundException;
 import dev.sorokin.eventmanager.service.model.UserAccount;
 import dev.sorokin.eventmanager.service.model.UserRole;
 import org.junit.jupiter.api.Nested;
@@ -68,7 +69,7 @@ class AuthControllerTest {
         }
 
         @Test
-        void duplicateLogin_returns409WithConflictMessage() throws Exception {
+        void duplicateLogin_returns400WithBadRequestMessage() throws Exception {
             when(passwordEncoder.encode(any())).thenReturn("hash");
             when(userAccountService.createUser(any()))
                     .thenThrow(new UserAlreadyExistsException("authuser"));
@@ -78,8 +79,8 @@ class AuthControllerTest {
                             .content("""
                                     {"login":"authuser","password":"Password1!","age":25}
                                     """))
-                    .andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.message").value("Conflict"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("Bad request"))
                     .andExpect(jsonPath("$.detailedMessage").isNotEmpty())
                     .andExpect(jsonPath("$.timestamp").isNotEmpty());
         }
@@ -137,9 +138,8 @@ class AuthControllerTest {
 
         @Test
         void success_returns200WithJwtToken() throws Exception {
-            when(userAccountService.getUserByLogin("authuser"))
+            when(userAccountService.authenticate("authuser", "Password1!"))
                     .thenReturn(new UserAccount(1L, "authuser", "hash", UserRole.USER, 25));
-            when(passwordEncoder.matches("Password1!", "hash")).thenReturn(true);
             when(jwtAuthService.generateToken("authuser")).thenReturn("test.jwt.token");
 
             mockMvc.perform(post("/users/auth")
@@ -153,9 +153,8 @@ class AuthControllerTest {
 
         @Test
         void wrongPassword_returns400() throws Exception {
-            when(userAccountService.getUserByLogin("authuser"))
-                    .thenReturn(new UserAccount(1L, "authuser", "hash", UserRole.USER, 25));
-            when(passwordEncoder.matches("WrongPass1!", "hash")).thenReturn(false);
+            when(userAccountService.authenticate("authuser", "WrongPass1!"))
+                    .thenThrow(new InvalidCommandException("Invalid login or password"));
 
             mockMvc.perform(post("/users/auth")
                             .contentType(APPLICATION_JSON)
@@ -167,7 +166,7 @@ class AuthControllerTest {
 
         @Test
         void nonExistentUser_returns404WithNotFoundMessage() throws Exception {
-            when(userAccountService.getUserByLogin("nobody"))
+            when(userAccountService.authenticate("nobody", "Password1!"))
                     .thenThrow(new UserNotFoundException("nobody"));
 
             mockMvc.perform(post("/users/auth")

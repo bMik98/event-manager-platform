@@ -24,6 +24,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class SecurityConfig {
 
+    private static final String USER = UserRole.USER.name();
+    private static final String ADMIN = UserRole.ADMIN.name();
+    private static final String[] ANY = {USER, ADMIN};
+
     private final JwtAuthFilter jwtAuthFilter;
     private final AuthenticationEntryPoint authenticationEntryPoint;
     private final AccessDeniedHandler accessDeniedHandler;
@@ -39,6 +43,7 @@ public class SecurityConfig {
     }
 
     @Bean
+    @SuppressWarnings({"java:S1192", "java:S5612"})
     public SecurityFilterChain securityFilterChain(HttpSecurity http) {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -54,11 +59,19 @@ public class SecurityConfig {
 
                         .requestMatchers(HttpMethod.POST, "/users/auth").permitAll()
                         .requestMatchers(HttpMethod.POST, "/users").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/users/**").hasRole(ADMIN)
 
-                        .requestMatchers(HttpMethod.GET, "/users/**").hasRole(UserRole.ADMIN.name())
+                        .requestMatchers(HttpMethod.GET, "/locations/**").hasAnyRole(ANY)
+                        .requestMatchers("/locations/**").hasRole(ADMIN)
 
-                        .requestMatchers(HttpMethod.GET, "/locations/**").hasAnyRole(UserRole.USER.name(), UserRole.ADMIN.name())
-                        .requestMatchers("/locations/**").hasRole(UserRole.ADMIN.name())
+                        .requestMatchers("/events/registrations/**").hasRole(USER)
+
+                        .requestMatchers(HttpMethod.POST, "/events/search").hasAnyRole(ANY)
+                        .requestMatchers(HttpMethod.GET, "/events/my").hasRole(USER)
+                        .requestMatchers(HttpMethod.POST, "/events").hasRole(USER)
+                        .requestMatchers(HttpMethod.GET, "/events/**").hasAnyRole(ANY)
+                        .requestMatchers(HttpMethod.PUT, "/events/**").hasAnyRole(ANY)
+                        .requestMatchers(HttpMethod.DELETE, "/events/**").hasAnyRole(ANY)
 
                         .anyRequest().authenticated()
                 )
