@@ -2,7 +2,8 @@ package dev.sorokin.eventmanager.controller;
 
 import dev.sorokin.eventmanager.config.ControllerTestConfig;
 import dev.sorokin.eventmanager.service.LocationService;
-import dev.sorokin.eventmanager.service.exception.LocationNotFoundException;
+import dev.sorokin.eventmanager.common.exception.LocationNotFoundException;
+import dev.sorokin.eventmanager.service.exception.InvalidCommandException;
 import dev.sorokin.eventmanager.service.model.Location;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -217,6 +218,22 @@ class LocationControllerTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.message").value("Validation failed"));
         }
+
+        @Test
+        void capacityBelowExistingEvent_returns400WithBadRequestMessage() throws Exception {
+            when(locationService.updateLocation(eq(1L), any()))
+                    .thenThrow(new InvalidCommandException(
+                            "Location capacity cannot be reduced to 50: an upcoming event at this location requires 80 places"));
+
+            mockMvc.perform(put("/locations/1").with(ADMIN)
+                            .contentType(APPLICATION_JSON)
+                            .content("""
+                                    {"name":"Main Hall","address":"123 Main St","capacity":50,"description":"Main venue"}
+                                    """))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("Bad request"))
+                    .andExpect(jsonPath("$.detailedMessage").isNotEmpty());
+        }
     }
 
     @Nested
@@ -236,6 +253,18 @@ class LocationControllerTest {
             mockMvc.perform(delete("/locations/999").with(ADMIN))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.message").value("Not found"))
+                    .andExpect(jsonPath("$.detailedMessage").isNotEmpty());
+        }
+
+        @Test
+        void hasEvents_returns400WithBadRequestMessage() throws Exception {
+            doThrow(new InvalidCommandException(
+                    "Location 1 cannot be deleted while it still has events"))
+                    .when(locationService).deleteLocationById(1L);
+
+            mockMvc.perform(delete("/locations/1").with(ADMIN))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("Bad request"))
                     .andExpect(jsonPath("$.detailedMessage").isNotEmpty());
         }
     }

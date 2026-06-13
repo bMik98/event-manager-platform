@@ -1,9 +1,14 @@
 package dev.sorokin.eventmanager.controller.advice;
 
-import dev.sorokin.eventmanager.common.exception.ItemAlreadyExistsException;
+import dev.sorokin.eventmanager.service.exception.ConflictingOperationException;
+import dev.sorokin.eventmanager.service.exception.ForbiddenOperationException;
+import dev.sorokin.eventmanager.service.exception.InvalidCommandException;
+import dev.sorokin.eventmanager.service.exception.ItemAlreadyExistsException;
 import dev.sorokin.eventmanager.common.exception.ItemNotFoundException;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +32,8 @@ public class GlobalExceptionHandler {
     private static final String UNSUPPORTED_MEDIA_TYPE = "Unsupported Media Type";
     private static final String NOT_FOUND = "Not found";
     private static final String CONFLICT = "Conflict";
+    private static final String BAD_REQUEST = "Bad request";
+    private static final String FORBIDDEN = "Forbidden";
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorMessageResponse> handleValidationException(MethodArgumentNotValidException ex) {
@@ -49,8 +56,22 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ItemAlreadyExistsException.class)
     public ResponseEntity<ErrorMessageResponse> handleItemAlreadyExistsException(ItemAlreadyExistsException ex) {
         log.warn(CONFLICT, ex);
-        ErrorMessageResponse body = ErrorMessageResponse.of(CONFLICT, ex.getMessage());
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+        ErrorMessageResponse body = ErrorMessageResponse.of(BAD_REQUEST, ex.getMessage());
+        return ResponseEntity.badRequest().body(body);
+    }
+
+    @ExceptionHandler(ConflictingOperationException.class)
+    public ResponseEntity<ErrorMessageResponse> handleConflictingOperationException(ConflictingOperationException ex) {
+        log.warn(CONFLICT, ex);
+        ErrorMessageResponse body = ErrorMessageResponse.of(BAD_REQUEST, ex.getMessage());
+        return ResponseEntity.badRequest().body(body);
+    }
+
+    @ExceptionHandler(ForbiddenOperationException.class)
+    public ResponseEntity<ErrorMessageResponse> handleForbiddenOperationException(ForbiddenOperationException ex) {
+        log.warn(FORBIDDEN, ex);
+        ErrorMessageResponse body = ErrorMessageResponse.of(FORBIDDEN, ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 
     @ExceptionHandler(HandlerMethodValidationException.class)
@@ -118,10 +139,41 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(body);
     }
 
+    @ExceptionHandler(InvalidCommandException.class)
+    public ResponseEntity<ErrorMessageResponse> handleInvalidCommandException(InvalidCommandException ex) {
+        log.warn("Invalid request: {}", ex.getMessage());
+        ErrorMessageResponse body = ErrorMessageResponse.of(BAD_REQUEST, ex.getMessage());
+        return ResponseEntity.badRequest().body(body);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorMessageResponse> handleIllegalArgumentException(IllegalArgumentException ex) {
-        log.warn("Bad request: {}", ex.getMessage());
-        ErrorMessageResponse body = ErrorMessageResponse.of("Bad request", ex.getMessage());
+        // An IllegalArgumentException is a broken invariant in our own code, not a client mistake — so it is a
+        // server error. The raw message is kept out of the response and only logged. Business-rule rejections
+        // that the client can act on must throw InvalidCommandException (400) instead.
+        log.error("Illegal argument — likely a programming error", ex);
+        ErrorMessageResponse body = ErrorMessageResponse.of(
+                "Internal server error",
+                "Unexpected server error. See logs for details."
+        );
+        return ResponseEntity.internalServerError().body(body);
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorMessageResponse> handleOptimisticLockingFailure(ObjectOptimisticLockingFailureException ex) {
+        log.warn("Optimistic locking conflict", ex);
+        ErrorMessageResponse body = ErrorMessageResponse.of(CONFLICT,
+                "The resource was modified concurrently. Reload it and retry.");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorMessageResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        // Concurrency races that slip past the in-service checks (e.g. a duplicate registration or the
+        // occupied_places CHECK) surface here as DB constraint violations — a conflict, not a server error.
+        log.warn("Data integrity violation", ex);
+        ErrorMessageResponse body = ErrorMessageResponse.of(BAD_REQUEST,
+                "The operation conflicts with the current state of the resource");
         return ResponseEntity.badRequest().body(body);
     }
 

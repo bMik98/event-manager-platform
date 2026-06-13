@@ -11,6 +11,7 @@ import java.util.List;
 @Mapper(componentModel = "spring")
 public interface LocationDbMapper {
 
+    @Mapping(target = "version", ignore = true)
     LocationEntity toEntity(Location location);
 
     Location toDomain(LocationEntity entity);
@@ -18,5 +19,6 @@ public interface LocationDbMapper {
     List<Location> toDomain(List<LocationEntity> entityList);
 
     @Mapping(target = "id", ignore = true)
+    @Mapping(target = "version", ignore = true)
     void updateEntityFromDomain(Location sourceDomain, @MappingTarget LocationEntity targetEntity);
 }

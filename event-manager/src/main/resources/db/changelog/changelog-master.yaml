@@ -3,3 +3,11 @@ databaseChangeLog:
       file: db/changelog/changesets/V001__create_locations.sql
   - include:
       file: db/changelog/changesets/V002__create_users.sql
+  - include:
+      file: db/changelog/changesets/V003__create_events.sql
+  - include:
+      file: db/changelog/changesets/V004__create_registrations.sql
+  - include:
+      file: db/changelog/changesets/V005__add_version_to_events.sql
+  - include:
+      file: db/changelog/changesets/V006__add_version_to_locations.sql

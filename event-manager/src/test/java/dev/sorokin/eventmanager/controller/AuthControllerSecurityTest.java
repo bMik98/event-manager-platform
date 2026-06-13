@@ -81,10 +81,8 @@ class AuthControllerSecurityTest {
 
     @BeforeEach
     void stubUserService() {
-        when(userAccountService.getUserByLogin(any()))
+        when(userAccountService.authenticate(any(), any()))
                 .thenReturn(new UserAccount(1L, "testuser", "hashed", UserRole.USER, 25));
-        when(passwordEncoder.matches(any(), any()))
-                .thenReturn(true);
     }
 
     @ParameterizedTest(name = "{0}")
