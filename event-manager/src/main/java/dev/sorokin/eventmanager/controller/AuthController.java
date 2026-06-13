@@ -30,10 +30,7 @@ public class AuthController {
 
     @PostMapping("/users/auth")
     public JwtResponse authenticateUser(@Valid @RequestBody AuthenticationRequest dto) {
-        UserAccount userAccount = userAccountService.getUserByLogin(dto.login());
-        if (!passwordEncoder.matches(dto.password(), userAccount.passwordHash())) {
-            throw new IllegalArgumentException("Invalid login or password");
-        }
+        UserAccount userAccount = userAccountService.authenticate(dto.login(), dto.password());
         String token = jwtAuthService.generateToken(userAccount.login());
         return new JwtResponse(token);
     }

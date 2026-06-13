@@ -2,7 +2,6 @@ package dev.sorokin.eventmanager.security;
 
 import dev.sorokin.eventmanager.repository.UserAccountRepository;
 import dev.sorokin.eventmanager.repository.entity.UserEntity;
-import dev.sorokin.eventmanager.service.exception.UserNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
 import org.springframework.security.core.userdetails.User;
@@ -19,8 +18,7 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public @NonNull UserDetails loadUserByUsername(@NonNull String login) throws UsernameNotFoundException {
-        UserEntity userEntity = userAccountRepository.findByLogin(login)
-                .orElseThrow(() -> new UserNotFoundException(login));
+        UserEntity userEntity = userAccountRepository.getByLoginOrThrow(login);
         return User.builder()
                 .username(userEntity.getLogin())
                 .password(userEntity.getPasswordHash())

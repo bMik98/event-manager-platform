@@ -55,3 +55,10 @@ jwt:
 default-admin:
   login: ${DEFAULT_ADMIN_LOGIN:admin}
   password: ${DEFAULT_ADMIN_PASSWORD}
+
+event:
+  status-scheduler:
+    # how often (ms) to advance event statuses WAIT_START -> STARTED -> FINISHED
+    fixed-delay-ms: ${EVENT_STATUS_SCHEDULER_DELAY_MS:60000}
+    # delay (ms) before the first run after startup
+    initial-delay-ms: ${EVENT_STATUS_SCHEDULER_INITIAL_DELAY_MS:10000}

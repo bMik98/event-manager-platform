@@ -38,4 +38,8 @@ public class LocationEntity {
 
     @Column(name = "description", length = Integer.MAX_VALUE)
     private String description;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 }

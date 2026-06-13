@@ -2,7 +2,7 @@ package dev.sorokin.eventmanager.controller;
 
 import dev.sorokin.eventmanager.config.ControllerTestConfig;
 import dev.sorokin.eventmanager.service.UserAccountService;
-import dev.sorokin.eventmanager.service.exception.UserNotFoundException;
+import dev.sorokin.eventmanager.common.exception.UserNotFoundException;
 import dev.sorokin.eventmanager.service.model.UserAccount;
 import dev.sorokin.eventmanager.service.model.UserRole;
 import org.junit.jupiter.api.Nested;
